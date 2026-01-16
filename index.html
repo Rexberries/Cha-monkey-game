@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Monkey Banana Mania</title>
+    <title>Cha's Monkey Mania</title>
     <style>
         body { margin: 0; background: #87CEEB; font-family: 'Arial', sans-serif; overflow: hidden; touch-action: none; }
         canvas { display: block; background: #90EE90; margin: 0 auto; }
@@ -10,21 +10,22 @@
         #ui-layer {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background: rgba(0,0,0,0.5); color: white; text-align: center;
+            background: rgba(0,0,0,0.5); color: white; text-align: center; z-index: 10;
         }
         #score-board { 
             position: absolute; top: 20px; width: 100%; text-align: center; 
             font-size: 24px; font-weight: bold; color: white; text-shadow: 2px 2px 4px #000;
-            pointer-events: none;
+            pointer-events: none; z-index: 5;
         }
         button { 
-            padding: 15px 40px; font-size: 24px; cursor: pointer; border-radius: 50px; 
+            padding: 20px 50px; font-size: 28px; cursor: pointer; border-radius: 50px; 
             border: none; background: #FFD700; color: #5C4033; font-weight: bold; 
-            box-shadow: 0 5px #B8860B; margin-top: 10px;
+            box-shadow: 0 6px #B8860B; margin-top: 10px;
         }
-        h1 { font-size: 45px; margin: 10px; text-shadow: 3px 3px 0px #8B4513; }
+        button:active { transform: translateY(4px); box-shadow: 0 2px #B8860B; }
+        h1 { font-size: 40px; margin: 10px; text-shadow: 3px 3px 0px #8B4513; color: #FFF; }
         .hidden { display: none !important; }
-        .high-score-text { font-size: 18px; margin-top: 10px; color: #FFD700; }
+        .high-score-text { font-size: 18px; margin-top: 15px; color: #FFD700; }
     </style>
 </head>
 <body>
@@ -35,10 +36,9 @@
     </div>
 
     <div id="ui-layer">
-        <h1 id="status-text">MONKEY MANIA</h1>
-        <div id="final-score" class="hidden"></div>
+        <h1 id="status-text">Cha's Monkey Mania</h1>
         <button id="start-btn">PLAY GAME</button>
-        <div class="high-score-text">All Time High Score: <span id="best-ever">0</span></div>
+        <div class="high-score-text">Best Score: <span id="best-ever">0</span></div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -53,35 +53,48 @@
         const highScoreDisplay = document.getElementById("high-score-display");
         const bestEver = document.getElementById("best-ever");
 
+        // Set Canvas Size
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
         let score = 0;
         let highScore = localStorage.getItem("monkeyHighScore") || 0;
         let gameActive = false;
-        let speedMultiplier = 1;
-        let monkey = { x: canvas.width / 2 - 40, y: canvas.height - 120, w: 80, h: 80 };
+        let animationId;
+        let spawnTimeout;
         let items = [];
+        let monkey = { x: 0, y: 0, w: 80, h: 80 };
 
-        // Show high score on load
+        // Initialize display
         highScoreDisplay.innerText = highScore;
         bestEver.innerText = highScore;
 
         function startGame() {
+            // Reset Variables
             score = 0;
             items = [];
-            speedMultiplier = 1;
-            monkey.w = 80; monkey.h = 80;
-            monkey.x = canvas.width / 2 - 40; // Reset position to center
+            monkey.w = 80; 
+            monkey.h = 80;
+            monkey.x = canvas.width / 2 - 40;
+            monkey.y = canvas.height - 120;
+            
             scoreElement.innerText = score;
             gameActive = true;
             uiLayer.classList.add("hidden");
+            
+            // Cancel any old loops before starting new ones
+            cancelAnimationFrame(animationId);
+            clearTimeout(spawnTimeout);
+            
             update();
             spawnItem();
         }
 
         function gameOver() {
             gameActive = false;
+            cancelAnimationFrame(animationId);
+            clearTimeout(spawnTimeout);
+
             if (score > highScore) {
                 highScore = score;
                 localStorage.setItem("monkeyHighScore", highScore);
@@ -89,11 +102,84 @@
                 highScoreDisplay.innerText = highScore;
             }
             uiLayer.classList.remove("hidden");
-            statusText.innerText = "BONKED! 💣";
-            startBtn.innerText = "REPLAY";
+            statusText.innerText = "GAME OVER!";
+            startBtn.innerText = "TRY AGAIN";
         }
 
         function spawnItem() {
             if (!gameActive) return;
+
             if (items.length < 3) {
-                let isBomb = Math.random()
+                let isBomb = Math.random() < 0.35; 
+                items.push({
+                    x: Math.random() * (canvas.width - 60),
+                    y: -100,
+                    size: 50 + (score * 0.7), 
+                    type: isBomb ? "💣" : "🍌"
+                });
+            }
+
+            let nextSpawn = Math.max(500, 1500 - (score * 100));
+            spawnTimeout = setTimeout(spawnItem, nextSpawn);
+        }
+
+        function update() {
+            if (!gameActive) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let speed = 4 + (score / 8);
+
+            // Draw Monkey
+            ctx.font = `${monkey.w}px Arial`;
+            ctx.fillText("🐒", monkey.x, monkey.y + monkey.h);
+
+            for (let i = items.length - 1; i >= 0; i--) {
+                let item = items[i];
+                item.y += speed;
+                
+                ctx.font = `${item.size}px Arial`;
+                ctx.fillText(item.type, item.x, item.y);
+
+                // Collision Logic
+                let hitX = item.x + (item.size / 2) > monkey.x && item.x < monkey.x + monkey.w;
+                let hitY = item.y > monkey.y + 20 && item.y - item.size < monkey.y + monkey.h;
+
+                if (hitX && hitY) {
+                    if (item.type === "🍌") {
+                        score++;
+                        scoreElement.innerText = score;
+                        monkey.w = Math.min(130, monkey.w + 1);
+                        monkey.h = Math.min(130, monkey.h + 1);
+                        items.splice(i, 1);
+                    } else {
+                        gameOver();
+                        return;
+                    }
+                } else if (item.y > canvas.height + 100) {
+                    items.splice(i, 1);
+                }
+            }
+            animationId = requestAnimationFrame(update);
+        }
+
+        const moveMonkey = (clientX) => {
+            if (!gameActive) return;
+            let newX = clientX - monkey.w / 2;
+            if (newX < 0) newX = 0;
+            if (newX > canvas.width - monkey.w) newX = canvas.width - monkey.w;
+            monkey.x = newX;
+        };
+
+        // Event Listeners
+        window.addEventListener("touchstart", (e) => moveMonkey(e.touches[0].clientX));
+        window.addEventListener("touchmove", (e) => moveMonkey(e.touches[0].clientX));
+        window.addEventListener("mousemove", (e) => moveMonkey(e.clientX));
+        
+        startBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            startGame();
+        });
+
+    </script>
+</body>
+</html>
