@@ -4,98 +4,71 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Cha's Monkey Mania</title>
     <style>
-        :root { --primary: #FFD700; --accent: #FF4500; --bg: #90EE90; }
+        :root { --primary: #FFD700; --accent: #FF4500; }
         body { margin: 0; background: #222; font-family: 'Arial Black', sans-serif; overflow: hidden; touch-action: none; }
-        canvas { display: block; background: linear-gradient(to bottom, #87CEEB, var(--bg)); margin: 0 auto; transition: background 0.5s; }
+        canvas { display: block; background: #87CEEB; margin: 0 auto; }
         
+        /* Menu Overlay */
         #menu {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 1000;
+            background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+            align-items: center; justify-content: center; z-index: 999;
         }
         
         .card {
-            background: rgba(255, 255, 255, 0.1); padding: 30px; border-radius: 30px;
-            border: 2px solid rgba(255,255,255,0.2); backdrop-filter: blur(10px);
-            text-align: center; width: 80%; max-width: 400px;
+            background: rgba(255, 255, 255, 0.1); padding: 30px; border-radius: 25px;
+            backdrop-filter: blur(10px); text-align: center; border: 2px solid #555;
+            width: 280px;
         }
 
-        h1 { color: var(--primary); font-size: 28px; margin: 0; text-shadow: 2px 2px #000; }
-        .high-score { color: #fff; font-size: 14px; margin: 10px 0; }
+        h1 { color: var(--primary); font-size: 24px; margin: 0; }
+        .hs { color: #fff; font-size: 14px; margin: 10px 0; }
 
         #btn-start {
             background: var(--accent); color: white; border: none;
-            padding: 15px 40px; font-size: 22px; font-weight: bold;
-            border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #8B0000;
+            padding: 15px 40px; font-size: 20px; font-weight: bold;
+            border-radius: 50px; cursor: pointer; box-shadow: 0 6px 0 #8B0000;
+            margin-top: 10px;
         }
-        #btn-start:active { transform: translateY(4px); box-shadow: 0 4px 0 #8B0000; }
+        #btn-start:active { transform: translateY(4px); box-shadow: 0 2px 0 #8B0000; }
 
         #score-board {
             position: fixed; top: 20px; width: 100%; text-align: center;
-            color: white; font-size: 40px; font-weight: 900; z-index: 10;
-            pointer-events: none; text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            color: white; font-size: 40px; font-weight: 900; z-index: 100;
+            pointer-events: none; text-shadow: 2px 2px 4px #000;
         }
 
-        #fever-tag {
+        #fever {
             position: fixed; top: 80px; width: 100%; text-align: center;
-            color: #FFD700; font-size: 30px; font-weight: 900; display: none;
-            z-index: 10; animation: blink 0.3s infinite;
+            color: yellow; font-size: 25px; display: none; z-index: 100;
         }
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
     </style>
 </head>
 <body>
 
     <div id="score-board">0</div>
-    <div id="fever-tag">FEVER MODE! 🔥</div>
+    <div id="fever">🔥 FEVER MODE 🔥</div>
 
     <div id="menu">
         <div class="card">
-            <h1>Cha's Monkey Mania</h1>
-            <div class="high-score">BEST: <span id="hs">0</span></div>
-            <button id="btn-start">GASKEUN!</button>
-            <p style="color:#ccc; font-size:12px; margin-top:15px">🍌+1 | ✨+10 | ⏳Slow | 💣DIE</p>
+            <h1 id="main-title">Cha's Monkey Mania</h1>
+            <div class="hs">BEST: <span id="hs-val">0</span></div>
+            <button id="btn-start" onclick="startGame()">GASKEUN!</button>
+            <p style="color:#aaa; font-size:11px; margin-top:15px">🍌+1 | ✨+10 | ⏳Slow | 💣DIE</p>
         </div>
     </div>
 
-    <canvas id="game"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
     <script>
-        const canvas = document.getElementById("game");
-        const ctx = canvas.getContext("2d");
+        const cvs = document.getElementById("gameCanvas");
+        const ctx = cvs.getContext("2d");
+        const scoreBoard = document.getElementById("score-board");
         const menu = document.getElementById("menu");
-        const btn = document.getElementById("btn-start");
-        const scoreDisplay = document.getElementById("score-board");
-        const feverTag = document.getElementById("fever-tag");
-        const hsDisplay = document.getElementById("hs");
+        const hsVal = document.getElementById("hs-val");
+        const mainTitle = document.getElementById("main-title");
 
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
+        cvs.width = window.innerWidth;
+        cvs.height = window.innerHeight;
 
-        let score = 0, isActive = false, isFever = false, isSlow = false;
-        let highScore = localStorage.getItem("monkeyHS") || 0;
-        let items = [], monkey = { x: canvas.width/2-40, y: canvas.height-140, w: 80, h: 80 };
-        let animationFrame, spawnTimer;
-
-        hsDisplay.innerText = highScore;
-
-        // --- SOUND ENGINE (Web Audio API) ---
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(freq, type, duration) {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.start();
-            osc.stop(audioCtx.currentTime + duration);
-        }
-
-        function init(e) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            score = 0; items = []; isActive = true; isFever = false; isSlow = false;
-            scoreDisplay.innerText = "0";
-            menu.style.display = "none";
+        let score = 0, highScore = localStorage.getItem("monkeyHS") ||
