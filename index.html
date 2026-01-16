@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Monkey Banana Catch</title>
+    <style>
+        body { margin: 0; background: #87CEEB; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; background: #90EE90; margin: 0 auto; max-width: 100%; height: auto; }
+        #ui { position: absolute; top: 10px; left: 10px; font-size: 20px; font-weight: bold; color: white; text-shadow: 2px 2px 4px #000; }
+    </style>
+</head>
+<body>
+    <div id="ui">Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreElement = document.getElementById("score");
+
+        // Set game size
+        canvas.width = window.innerWidth > 400 ? 400 : window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        let score = 0;
+        let monkey = { x: canvas.width / 2 - 25, y: canvas.height - 80, width: 50, height: 50 };
+        let bananas = [];
+
+        // Game Loop
+        function update() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw Monkey (Brown Square for now, you can replace with an image!)
+            ctx.fillStyle = "#8B4513";
+            ctx.fillRect(monkey.x, monkey.y, monkey.width, monkey.height);
+            ctx.fillStyle = "white"; ctx.fillText("🐒", monkey.x + 15, monkey.y + 30);
+
+            // Handle Bananas
+            if (Math.random() < 0.02) {
+                bananas.push({ x: Math.random() * (canvas.width - 30), y: -30, size: 30 });
+            }
+
+            for (let i = bananas.length - 1; i >= 0; i--) {
+                let b = bananas[i];
+                b.y += 3; // Speed
+                
+                // Draw Banana
+                ctx.font = "24px Arial";
+                ctx.fillText("🍌", b.x, b.y);
+
+                // Collision Detection
+                if (b.y + 20 > monkey.y && b.x > monkey.x && b.x < monkey.x + monkey.width) {
+                    bananas.splice(i, 1);
+                    score++;
+                    scoreElement.innerText = score;
+                } else if (b.y > canvas.height) {
+                    bananas.splice(i, 1);
+                }
+            }
+            requestAnimationFrame(update);
+        }
+
+        // Controls
+        window.addEventListener("touchstart", (e) => {
+            let touchX = e.touches[0].clientX;
+            monkey.x = touchX - monkey.width / 2;
+        });
+        window.addEventListener("touchmove", (e) => {
+            let touchX = e.touches[0].clientX;
+            monkey.x = touchX - monkey.width / 2;
+        });
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "ArrowLeft") monkey.x -= 20;
+            if (e.key === "ArrowRight") monkey.x += 20;
+        });
+
+        update();
+    </script>
+</body>
+</html>
