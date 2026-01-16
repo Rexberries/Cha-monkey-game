@@ -5,54 +5,56 @@
     <title>Cha's Monkey Mania</title>
     <style>
         :root { --primary: #FFD700; --accent: #FF4500; --bg: #90EE90; }
-        body { margin: 0; background: #222; font-family: 'Segoe UI', Roboto, sans-serif; overflow: hidden; touch-action: none; }
+        body { margin: 0; background: #222; font-family: 'Arial Black', sans-serif; overflow: hidden; touch-action: none; }
+        canvas { display: block; background: linear-gradient(to bottom, #87CEEB, var(--bg)); margin: 0 auto; transition: background 0.5s; }
         
-        /* Background Game */
-        canvas { display: block; background: linear-gradient(to bottom, #87CEEB, var(--bg)); margin: 0 auto; }
-        
-        /* UI Overlay yang cakep */
         #menu {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
             align-items: center; justify-content: center; z-index: 1000;
-            transition: opacity 0.3s;
         }
         
         .card {
-            background: rgba(255, 255, 255, 0.1); padding: 40px; border-radius: 30px;
+            background: rgba(255, 255, 255, 0.1); padding: 30px; border-radius: 30px;
             border: 2px solid rgba(255,255,255,0.2); backdrop-filter: blur(10px);
-            text-align: center; box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            text-align: center; width: 80%; max-width: 400px;
         }
 
-        h1 { color: var(--primary); font-size: 32px; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 2px; }
-        p { color: #ddd; margin-bottom: 30px; }
+        h1 { color: var(--primary); font-size: 28px; margin: 0; text-shadow: 2px 2px #000; }
+        .high-score { color: #fff; font-size: 14px; margin: 10px 0; }
 
-        /* Tombol Gaskeun yang Empuk */
         #btn-start {
             background: var(--accent); color: white; border: none;
-            padding: 18px 45px; font-size: 24px; font-weight: bold;
-            border-radius: 50px; cursor: pointer;
-            box-shadow: 0 10px 0 #8B0000; transition: all 0.1s;
-            -webkit-tap-highlight-color: transparent;
+            padding: 15px 40px; font-size: 22px; font-weight: bold;
+            border-radius: 50px; cursor: pointer; box-shadow: 0 8px 0 #8B0000;
         }
-        #btn-start:active { transform: translateY(6px); box-shadow: 0 4px 0 #8B0000; }
+        #btn-start:active { transform: translateY(4px); box-shadow: 0 4px 0 #8B0000; }
 
         #score-board {
-            position: fixed; top: 20px; left: 0; width: 100%; text-align: center;
-            color: white; font-size: 30px; font-weight: 900; z-index: 10;
-            pointer-events: none; text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            position: fixed; top: 20px; width: 100%; text-align: center;
+            color: white; font-size: 40px; font-weight: 900; z-index: 10;
+            pointer-events: none; text-shadow: 0 4px 10px rgba(0,0,0,0.5);
         }
+
+        #fever-tag {
+            position: fixed; top: 80px; width: 100%; text-align: center;
+            color: #FFD700; font-size: 30px; font-weight: 900; display: none;
+            z-index: 10; animation: blink 0.3s infinite;
+        }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } }
     </style>
 </head>
 <body>
 
     <div id="score-board">0</div>
+    <div id="fever-tag">FEVER MODE! 🔥</div>
 
     <div id="menu">
         <div class="card">
-            <h1 id="title">Cha's Monkey Mania</h1>
-            <p id="sub">Tangkap 🍌 Hindari 💣</p>
+            <h1>Cha's Monkey Mania</h1>
+            <div class="high-score">BEST: <span id="hs">0</span></div>
             <button id="btn-start">GASKEUN!</button>
+            <p style="color:#ccc; font-size:12px; margin-top:15px">🍌+1 | ✨+10 | ⏳Slow | 💣DIE</p>
         </div>
     </div>
 
@@ -64,101 +66,36 @@
         const menu = document.getElementById("menu");
         const btn = document.getElementById("btn-start");
         const scoreDisplay = document.getElementById("score-board");
-        const title = document.getElementById("title");
+        const feverTag = document.getElementById("fever-tag");
+        const hsDisplay = document.getElementById("hs");
 
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
 
-        let score = 0, isActive = false, items = [];
-        let monkey = { x: canvas.width/2-40, y: canvas.height-140, w: 80, h: 80 };
+        let score = 0, isActive = false, isFever = false, isSlow = false;
+        let highScore = localStorage.getItem("monkeyHS") || 0;
+        let items = [], monkey = { x: canvas.width/2-40, y: canvas.height-140, w: 80, h: 80 };
         let animationFrame, spawnTimer;
 
-        // FUNGSI MULAI (Digabung untuk Mobile & PC)
+        hsDisplay.innerText = highScore;
+
+        // --- SOUND ENGINE (Web Audio API) ---
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playSound(freq, type, duration) {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start();
+            osc.stop(audioCtx.currentTime + duration);
+        }
+
         function init(e) {
-            if (e) { e.preventDefault(); e.stopPropagation(); }
-            
-            // Reset state
-            score = 0; items = []; isActive = true;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            score = 0; items = []; isActive = true; isFever = false; isSlow = false;
             scoreDisplay.innerText = "0";
-            menu.style.opacity = "0";
-            setTimeout(() => { menu.style.display = "none"; }, 300);
-
-            cancelAnimationFrame(animationFrame);
-            clearTimeout(spawnTimer);
-            
-            play();
-            generate();
-        }
-
-        function generate() {
-            if(!isActive) return;
-            let isBomb = Math.random() < 0.3;
-            items.push({
-                x: Math.random() * (canvas.width - 60),
-                y: -60,
-                type: isBomb ? "💣" : "🍌",
-                speed: 4 + (score * 0.2)
-            });
-            spawnTimer = setTimeout(generate, Math.max(400, 1000 - (score * 25)));
-        }
-
-        function play() {
-            if(!isActive) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-            // Gambar Monkey (Emoji Center)
-            ctx.font = "70px Arial";
-            ctx.textAlign = "center";
-            ctx.fillText("🐒", monkey.x + 40, monkey.y + 60);
-
-            for(let i = items.length - 1; i >= 0; i--) {
-                let it = items[i];
-                it.y += it.speed;
-                
-                ctx.font = "50px Arial";
-                ctx.fillText(it.type, it.x + 25, it.y);
-
-                // Collision Detection yang lebih akurat
-                if(it.y > monkey.y && it.y < monkey.y + 80 && 
-                   it.x + 50 > monkey.x && it.x < monkey.x + 80) {
-                    
-                    if(it.type === "💣") {
-                        endGame();
-                    } else {
-                        score++;
-                        scoreDisplay.innerText = score;
-                        items.splice(i, 1);
-                    }
-                } else if(it.y > canvas.height + 50) {
-                    items.splice(i, 1);
-                }
-            }
-            animationFrame = requestAnimationFrame(play);
-        }
-
-        function endGame() {
-            isActive = false;
-            menu.style.display = "flex";
-            setTimeout(() => { menu.style.opacity = "1"; }, 10);
-            title.innerText = "SKOR: " + score;
-            btn.innerText = "COBA LAGI";
-        }
-
-        // Kontrol Gerak
-        function handleMove(e) {
-            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-            let nextX = clientX - 40;
-            if(nextX < 0) nextX = 0;
-            if(nextX > canvas.width - 80) nextX = canvas.width - 80;
-            monkey.x = nextX;
-        }
-
-        window.addEventListener("touchmove", handleMove, {passive: false});
-        window.addEventListener("mousemove", handleMove);
-
-        // EVENT LISTENER UTAMA (Gunakan pointerdown agar lebih universal)
-        btn.addEventListener("pointerdown", init);
-
-    </script>
-</body>
-</html>
+            menu.style.display = "none";
